@@ -1,14 +1,25 @@
-# HP LaserJet Professional P1102w Driver for macOS Tahoe, Golden Gate and Beyond
+# HP LaserJet Professional P1102 and P1102w drivers for macOS
 
 ## Overview
 
-This repository provides a community-modified driver package for the **HP LaserJet Professional P1102w** printer that installs on current versions of macOS, including **macOS 26 (Tahoe)**, **macOS 27 (Golden Gate)**, and later releases.
+This repository provides a native USB driver for the **HP LaserJet Professional P1102 and P1102w** on Apple Silicon. It also includes the legacy repackaged HP installer for macOS 26 Tahoe and macOS 27 Golden Gate.
 
 HP's official driver package refuses to install on newer macOS releases because its installer checks the macOS version number. This repackage takes the latest official HP driver and replaces only the installer's `Distribution` file with one that has no macOS version check, so the package is no longer tied to a specific macOS version. The driver files themselves are unchanged.
 
 ## Native driver for Apple Silicon
 
-For an HP LaserJet Professional P1102 or P1102w connected over USB, build a native installer on an Apple Silicon Mac with Xcode Command Line Tools and an internet connection. The CUPS filter and ZjStream encoder run without Rosetta, the HP software package, Homebrew, or Ghostscript.
+The native driver supports USB printing on Apple Silicon Macs running macOS 12 or later. The CUPS filter and ZjStream encoder run without Rosetta, the HP software package, Homebrew, or Ghostscript.
+
+1. Download `HP_P1102_Native_macOS.pkg` and `SHA256SUMS` from the newest Apple Silicon release in [GitHub Releases](https://github.com/acamarinkovic/hp-p1102w/releases). Run `shasum -a 256 HP_P1102_Native_macOS.pkg` in the download folder and compare its output with the installer entry in `SHA256SUMS`. Open the package after the hashes match. If macOS blocks the unsigned installer, follow [Apple's instructions for opening software you trust](https://support.apple.com/en-us/102445).
+2. Connect the printer over USB and open **Printers & Scanners** in **System Settings**. On macOS 12, open **System Preferences → Printers & Scanners** and click **+**.
+3. Add the USB printer with a distinct name such as **HP P1102 Native**. Under **Use → Select Software**, choose **HP LaserJet Professional P1102/P1102w (Apple Silicon)** for either model.
+4. Print a test page from the new queue. To use it for future jobs, select it as the default printer in **Printers & Scanners**.
+
+The installer registers the driver and leaves existing queues in place. The release includes the exact upstream driver source. This driver uses a macOS CUPS PPD and filter. The installer requires macOS 12 or later, and printing depends on continued support for this CUPS driver interface.
+
+### Build the native installer
+
+To rebuild from source, use an Apple Silicon Mac with Xcode Command Line Tools and an internet connection.
 
 ```sh
 mkdir -p dist &&
@@ -16,9 +27,7 @@ mkdir -p dist &&
 open dist/HP_P1102_Native_macOS.pkg
 ```
 
-The installer adds a driver option on Apple Silicon Macs running macOS 12 or later. Open **Printers & Scanners** in **System Settings**. On macOS 12, open **System Preferences → Printers & Scanners** and click **+**. Add the USB printer with a distinct name such as **HP P1102 Native**. Under **Use → Select Software**, choose **HP LaserJet Professional P1102/P1102w (Apple Silicon)** for either model. Existing queues keep their current drivers.
-
-The locally built installer is unsigned. If macOS blocks it, verify the source and follow [Apple's instructions for opening software you trust](https://support.apple.com/en-us/102445). The build runs the offline print test from the pinned [GPL-licensed native driver source](https://github.com/danielbchurchill/hp-p1102w-macos-driver/tree/ddb582f38be917947303488595c4125e9fac073b).
+The build runs an offline print test using the pinned [GPL-licensed native driver source](https://github.com/danielbchurchill/hp-p1102w-macos-driver/tree/ddb582f38be917947303488595c4125e9fac073b). To build the installer, source archive, and checksums together, run `./tools/build-native-driver.sh --release dist-release`. Use a new output directory for each release build. The [Apple Silicon workflow](.github/workflows/native-driver.yml) also tests installation on an Apple Silicon runner and publishes releases for `native-v*` tags.
 
 ## Supported macOS versions
 

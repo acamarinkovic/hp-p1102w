@@ -1,17 +1,30 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ $# -ne 1 || ! -d "$1" ]]; then
-    printf 'Usage: %s EXISTING_OUTPUT_DIRECTORY\n' "$0" >&2
+release_build=false
+if [[ ${1:-} = --release ]]; then
+    release_build=true
+    shift
+fi
+if [[ $# -ne 1 || -z "$1" ]]; then
+    printf 'Usage: %s EXISTING_DIRECTORY | --release NEW_DIRECTORY\n' "$0" >&2
     exit 2
 fi
 
-output_directory=$1
+output_directory=${1%/}
 [[ "$output_directory" = /* ]] || output_directory="./$output_directory"
+output_parent=${output_directory%/*}
+output_parent=${output_parent:-/}
 package_name=HP_P1102_Native_macOS.pkg
+source_archive_name=HP_P1102_Native_Source.tar.gz
 output_package="$output_directory/$package_name"
-if [[ -d "$output_package" ]]; then
-    printf 'Package path is a directory: %s\n' "$output_package" >&2
+if "$release_build"; then
+    if [[ -e "$output_directory" || -L "$output_directory" || ! -d "$output_parent" ]]; then
+        printf 'Choose a new output directory inside an existing directory: %s\n' "$output_directory" >&2
+        exit 2
+    fi
+elif [[ ! -d "$output_directory" || -d "$output_package" ]]; then
+    printf 'Choose an existing directory with an available package path: %s\n' "$output_directory" >&2
     exit 2
 fi
 
@@ -20,7 +33,8 @@ readonly source_commit=ddb582f38be917947303488595c4125e9fac073b
 readonly driver_install_location=/Library/Printers/HP_P1102_Native
 readonly driver_display_name='HP LaserJet Professional P1102/P1102w (Apple Silicon)'
 build_directory=$(mktemp -d "${TMPDIR:-/tmp}/hp-p1102-native.XXXXXXXX")
-trap 'rm -rf -- "$build_directory"' EXIT
+artifact_directory=
+trap 'rm -rf -- "$build_directory" "${artifact_directory:-$build_directory}"' EXIT
 
 source_directory="$build_directory/source"
 git_environment=$(/usr/bin/git rev-parse --local-env-vars)
@@ -59,5 +73,26 @@ done
 /usr/bin/productbuild --product "$build_directory/requirements.plist" \
     --package "$build_directory/driver.pkg" --package "$build_directory/ppd.pkg" \
     "$build_directory/$package_name"
-/usr/bin/install -S -m 0644 "$build_directory/$package_name" "$output_package"
-printf 'Built %s\n' "$output_package"
+if ! "$release_build"; then
+    /usr/bin/install -S -m 0644 "$build_directory/$package_name" "$output_package"
+    printf 'Built %s\n' "$output_package"
+    exit 0
+fi
+
+artifact_directory=$(mktemp -d "$output_parent/.hp-p1102-release.XXXXXXXX")
+artifact_directory=$(cd "$artifact_directory" && pwd -P)
+/usr/bin/install -m 0644 "$build_directory/$package_name" "$artifact_directory/$package_name"
+/usr/bin/git -C "$source_directory" archive --format=tar.gz --prefix=hp-p1102-native-source/ \
+    --output="$artifact_directory/$source_archive_name" "$source_commit"
+(
+    cd "$artifact_directory"
+    /usr/bin/shasum -a 256 "$package_name" "$source_archive_name" > SHA256SUMS
+)
+/bin/chmod 0755 "$artifact_directory"
+/usr/bin/python3 -I -c '
+import os
+import sys
+
+os.rename(sys.argv[1], sys.argv[2])
+' "$artifact_directory" "$output_directory"
+printf 'Built release artifacts in %s\n' "$output_directory"

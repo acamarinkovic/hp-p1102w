@@ -20,6 +20,7 @@ output_parent=${output_directory%/*}
 output_parent=${output_parent:-/}
 package_name=HP_P1102_Native_macOS.pkg
 source_archive_name=HP_P1102_Native_Source.tar.gz
+package_version=1.0.1
 output_package="$output_directory/$package_name"
 if "$release_build"; then
     if [[ -e "$output_directory" || -L "$output_directory" || ! -d "$output_parent" ]]; then
@@ -71,9 +72,9 @@ done
 /bin/chmod 0644 "$ppd_root/HP-LaserJet-P1102-Native.ppd"
 
 /usr/bin/pkgbuild --root "$driver_root" --identifier io.github.acamarinkovic.p1102w.native.driver \
-    --version 1.0 --install-location "$driver_install_location" "$build_directory/driver.pkg"
+    --version "$package_version" --install-location "$driver_install_location" "$build_directory/driver.pkg"
 /usr/bin/pkgbuild --root "$ppd_root" --identifier io.github.acamarinkovic.p1102w.native.ppd \
-    --version 1.0 --install-location /Library/Printers/PPDs/Contents/Resources "$build_directory/ppd.pkg"
+    --version "$package_version" --install-location /Library/Printers/PPDs/Contents/Resources "$build_directory/ppd.pkg"
 /usr/bin/plutil -create xml1 "$build_directory/requirements.plist"
 /usr/bin/plutil -insert arch -json '["arm64"]' "$build_directory/requirements.plist"
 /usr/bin/plutil -insert os -json '["12.0"]' "$build_directory/requirements.plist"

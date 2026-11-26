@@ -7,7 +7,7 @@ on:
       - tools/build-native-driver.sh
       - package/NATIVE_RELEASE_NOTES.md
   push:
-    branches: [apple-silicon]
+    branches: [master]
     tags: ['native-v*']
     paths:
       - .github/workflows/native-driver.yml

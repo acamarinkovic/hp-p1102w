@@ -1,0 +1,84 @@
+name: Apple Silicon driver
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/native-driver.yml
+      - tools/build-native-driver.sh
+      - package/NATIVE_RELEASE_NOTES.md
+  push:
+    branches: [apple-silicon]
+    tags: ['native-v*']
+    paths:
+      - .github/workflows/native-driver.yml
+      - tools/build-native-driver.sh
+      - package/NATIVE_RELEASE_NOTES.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build and test the driver
+        run: ./tools/build-native-driver.sh --release dist
+      - name: Verify installer and installed driver
+        run: |
+          sudo installer -pkg dist/HP_P1102_Native_macOS.pkg -target /
+          pkgutil --pkg-info io.github.acamarinkovic.p1102w.native.driver
+          pkgutil --pkg-info io.github.acamarinkovic.p1102w.native.ppd
+          cupstestppd /Library/Printers/PPDs/Contents/Resources/HP-LaserJet-P1102-Native.ppd
+          for executable in /Library/Printers/HP_P1102_Native/{bin/foo2zjs,filter/rastertozjs}; do
+            test "$(lipo "$executable" -archs)" = arm64
+            codesign --verify "$executable"
+          done
+      - name: Verify SHA-256 checksums
+        working-directory: dist
+        run: shasum -a 256 -c SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hp-p1102-apple-silicon
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/native-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: hp-p1102-apple-silicon
+          path: dist
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+          if gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft == false' | grep -qx true; then
+            existing_release=$(mktemp -d)
+            gh release download "$GITHUB_REF_NAME" --dir "$existing_release" \
+              --pattern HP_P1102_Native_macOS.pkg --pattern HP_P1102_Native_Source.tar.gz --pattern SHA256SUMS
+            (cd "$existing_release" && \
+              shasum -a 256 HP_P1102_Native_macOS.pkg HP_P1102_Native_Source.tar.gz | cmp - SHA256SUMS)
+            gzip -t "$existing_release/HP_P1102_Native_Source.tar.gz"
+            cmp <(gzip -dc dist/HP_P1102_Native_Source.tar.gz) \
+              <(gzip -dc "$existing_release/HP_P1102_Native_Source.tar.gz")
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            dist/HP_P1102_Native_macOS.pkg dist/HP_P1102_Native_Source.tar.gz dist/SHA256SUMS \
+            --verify-tag --title "HP LaserJet P1102/P1102w for Apple Silicon ${GITHUB_REF_NAME#native-}" \
+            --notes-file package/NATIVE_RELEASE_NOTES.md
